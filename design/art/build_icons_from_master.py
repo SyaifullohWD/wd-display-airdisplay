@@ -77,23 +77,6 @@ def adaptive_foreground(master: Image.Image) -> Image.Image:
     return canvas
 
 
-def monochrome_layer(master: Image.Image) -> Image.Image:
-    """Single-colour silhouette of the mark for Android 13 themed icons."""
-    small = master.convert("RGB")
-    arr = np.asarray(small).astype(np.float32)
-    bg = np.asarray(small.filter(ImageFilter.GaussianBlur(radius=small.width * 0.06))).astype(np.float32)
-    mark = np.abs(arr - bg).sum(axis=2) > 40
-    mask = Image.fromarray((mark * 255).astype(np.uint8), mode="L")
-    mask = mask.filter(ImageFilter.MaxFilter(5))
-    mask = mask.resize((VIEWPORT_PX, VIEWPORT_PX), Image.LANCZOS)
-    canvas = Image.new("L", (ADAPTIVE_PX, ADAPTIVE_PX), 0)
-    offset = (ADAPTIVE_PX - VIEWPORT_PX) // 2
-    canvas.paste(mask, (offset, offset))
-    out = Image.new("RGBA", (ADAPTIVE_PX, ADAPTIVE_PX), (255, 255, 255, 0))
-    out.putalpha(canvas)
-    return out
-
-
 def banner(master: Image.Image, width: int, height: int) -> Image.Image:
     tile_h = int(height * 0.78)
     tile = master.resize((tile_h, tile_h), Image.LANCZOS).convert("RGBA")
@@ -119,8 +102,8 @@ def main() -> None:
     edge_extend(master.resize((VIEWPORT_PX, VIEWPORT_PX), Image.LANCZOS).convert("RGBA"), ADAPTIVE_PX).save(
         RES / "drawable-xxxhdpi/ic_launcher_background.png"
     )
-    monochrome_layer(master).save(RES / "drawable-xxxhdpi/ic_launcher_monochrome.png")
-    print("adaptive layers 432x432 written (foreground, background, monochrome)")
+    print("adaptive layers 432x432 written (foreground, background)")
+    print("no monochrome layer by design: themed icons are opted out")
 
     banner(master, 320, 180).save(RES / "drawable/tv_banner.png")
     banner(master, 640, 360).save(RES / "drawable-xhdpi/tv_banner.png")
