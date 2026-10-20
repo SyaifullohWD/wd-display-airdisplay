@@ -1,0 +1,11 @@
+prefix=/Users/syaifullohwd/Documents/Code/pocket-airdisplay/tools/libplist-install
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: libplist++
+Description: C++ binding for libplist
+Version: 2.6.0
+Libs: -L${libdir} -lplist++-2.0
+Cflags: -I${includedir}
+Requires.private: libplist-2.0 >= 2.6.0

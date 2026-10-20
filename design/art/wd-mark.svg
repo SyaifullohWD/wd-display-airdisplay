@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- WD Display master mark geometry. Original construction; see
+     design/BRANDING-NOTES.md. No third-party or Apple artwork is copied. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="108" height="108" viewBox="0 0 108 108">
+  <defs>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F7FFFD"/>
+      <stop offset="0.5" stop-color="#C4EAE1"/>
+      <stop offset="1" stop-color="#93BFB7"/>
+    </linearGradient>
+  </defs>
+  <rect width="108" height="108" rx="24" fill="#1C1C1E"/>
+  <path fill="url(#glass)" d="M21.000,32.652 L27.633,78.794 L33.923,78.794 L58.446,33.695 L49.110,30.249 L35.470,55.332 L31.715,29.206 Z M77.664,29.206 L63.458,55.332 L59.852,30.249 L49.137,33.695 L55.620,78.794 L61.911,78.794 L87.000,32.652 Z"/>
+</svg>

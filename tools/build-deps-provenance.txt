@@ -1,0 +1,27 @@
+build-deps provenance — rebuilt 2026-10-19T01:25:40Z
+
+Source archives (official upstream releases):
+
+openssl-3.0.16.tar.gz
+  url:    https://github.com/openssl/openssl/releases/download/openssl-3.0.16/openssl-3.0.16.tar.gz
+  sha256: 57e03c50feab5d31b152af2b764f10379aecd8ee92f16c985983ce4a99f7ef86
+
+libplist-2.6.0.tar.bz2
+  url:    https://github.com/libimobiledevice/libplist/releases/download/2.6.0/libplist-2.6.0.tar.bz2
+  sha256: 67be9ee3169366589c92dc7c22809b90f51911dd9de22520c39c9a64fb047c9c
+
+Build configuration:
+  NDK:    NDK r27d (27.3.13750724) at .tools/ndk-r27d
+  triple: aarch64-linux-android
+  api:    29
+  host:   Darwin 25.6.0 arm64
+
+Output artifacts (app/src/main/cpp/deps/*/arm64-v8a/):
+  libcrypto.a    (OpenSSL 3.0.16 static, no-shared no-tests no-ui-console)
+    sha256: 87a1ba3020e5653cd00e14256bbd49e945a87aaed3f215a7250443720fdd3e8d
+  libplist-2.0.a (libplist 2.6.0 static, --disable-shared --without-cython --without-tests, strip-debug)
+    sha256: 661a3a3b55e11216f16e4624d9d9cd8e05f17ea37c88f2dc6102a1f69f93b44d
+
+Local-path check (strings | grep /Users/):
+  libcrypto.a:   0 reference(s)
+  libplist-2.0.a: 0 reference(s)

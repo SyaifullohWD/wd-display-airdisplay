@@ -1,0 +1,6 @@
+NDK version: 27.3.13750724 (r27d)
+Platform: darwin (macOS universal)
+Source: Google Android SDK repository manifest repository2-3.xml
+Download URL: https://dl.google.com/android/repository/android-ndk-r27d-darwin.zip
+Expected SHA1: 2970926d705988f79baa9b04c51b4f7914dd8c56
+Download date: 2026-10-19T00:50:07Z

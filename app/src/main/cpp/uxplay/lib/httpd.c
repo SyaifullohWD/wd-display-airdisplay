@@ -1,0 +1,771 @@
+/**
+ *  Copyright (C) 2011-2012  Juho Vähä-Herttua
+ *
+ *  This library is free software; you can redistribute it and/or
+ *  modify it under the terms of the GNU Lesser General Public
+ *  License as published by the Free Software Foundation; either
+ *  version 2.1 of the License, or (at your option) any later version.
+ *
+ *  This library is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ *  Lesser General Public License for more details.
+ *
+ *===================================================================
+ * modified by fduncanh 2022-2026
+ */
+
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <assert.h>
+#include <stdbool.h>
+#include <errno.h>
+#include <time.h>
+#include <stdint.h>
+
+#ifndef HTTPD_REQUEST_TIMEOUT_MS
+#define HTTPD_REQUEST_TIMEOUT_MS 10000
+#endif
+
+static uint64_t httpd_now_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t) ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+#include "httpd.h"
+#include "netutils.h"
+#include "http_request.h"
+#include "compat.h"
+#include "logger.h"
+#include "utils.h"
+
+static const char *typename[] = {
+    [CONNECTION_TYPE_UNKNOWN] = "Unknown",
+    [CONNECTION_TYPE_RAOP]    = "RAOP",
+    [CONNECTION_TYPE_AIRPLAY] = "AirPlay",
+    [CONNECTION_TYPE_PTTH]    = "AirPlay (reversed)",
+    [CONNECTION_TYPE_HLS]     = "HLS"
+};
+
+struct http_connection_s {
+    int connected;
+    int socket_fd;
+    void *user_data;
+    connection_type_t type;
+    http_request_t *request;
+    int pending_remove;
+    char prefix[8];
+    size_t prefix_length;
+    uint64_t request_started_ms;
+};
+typedef struct http_connection_s http_connection_t;
+
+struct httpd_s {
+    logger_t *logger;
+    httpd_callbacks_t callbacks;
+    int max_connections;
+    int open_connections;
+    http_connection_t *connections;
+    char nohold;
+
+    /* These variables only edited mutex locked */
+    int running;
+    int joined;
+    thread_handle_t thread;
+    mutex_handle_t run_mutex;
+
+    /* Server fds for accepting connections */
+    int server_fd4;
+    int server_fd6;
+};
+
+const char *
+httpd_get_connection_typename (connection_type_t type) {
+  return typename[type];
+}
+
+int
+httpd_get_connection_socket (httpd_t *httpd, void *user_data) {
+    for (int i = 0; i < httpd->max_connections; i++) {
+        http_connection_t *connection = &httpd->connections[i];
+	if (!connection->connected) {
+            continue;
+        }
+        if (connection->user_data == user_data) {
+            return connection->socket_fd;
+        }
+    }
+    return -1;
+}
+
+int
+httpd_set_connection_type (httpd_t *httpd, void *user_data, connection_type_t type) {
+    for (int i = 0; i < httpd->max_connections; i++) {
+        http_connection_t *connection = &httpd->connections[i];
+	if (!connection->connected) {
+            continue;
+        }
+        if (connection->user_data == user_data) {
+            connection->type = type;
+            return i;
+        }
+    }
+    return -1;
+}
+  
+int
+httpd_count_connection_type (httpd_t *httpd, connection_type_t type) {
+    int count = 0;
+    for (int i = 0; i < httpd->max_connections; i++) {
+        http_connection_t *connection = &httpd->connections[i];
+        if (!connection->connected) {
+            continue;
+        }
+        if (connection->type == type) {
+            count++;
+        }
+    }
+    return count;
+}
+
+int
+httpd_get_connection_socket_by_type (httpd_t *httpd, connection_type_t type, int instance){
+    int count = 0;
+    for (int i = 0; i < httpd->max_connections; i++) {
+        http_connection_t *connection = &httpd->connections[i];
+        if (!connection->connected) {
+            continue;
+        }
+        if (connection->type == type) {
+            count++;
+            if (count == instance) {
+                return connection->socket_fd;
+            }
+        }
+    }
+    return 0;
+}
+
+void *
+httpd_get_connection_by_type (httpd_t *httpd, connection_type_t type, int instance){
+    int count = 0;
+    for (int i = 0; i < httpd->max_connections; i++) {
+        http_connection_t *connection = &httpd->connections[i];
+        if (!connection->connected) {
+            continue;
+        }
+        if (connection->type == type) {
+            count++;
+            if (count == instance) {
+                return connection->user_data;
+            }
+        }
+    }
+    return NULL;
+}
+
+#define MAX_CONNECTIONS 12  /* value used in AppleTV 3*/
+httpd_t *
+httpd_init(logger_t *logger, httpd_callbacks_t *callbacks, int nohold)
+{
+    httpd_t *httpd;
+    assert(logger);
+    assert(callbacks);
+
+    /* Allocate the httpd_t structure */
+    httpd = calloc(1, sizeof(httpd_t));
+    if (!httpd) {
+        return NULL;
+    }
+
+    httpd->nohold = (nohold ? 1 : 0);
+    httpd->max_connections = MAX_CONNECTIONS;  
+    httpd->connections = calloc(httpd->max_connections, sizeof(http_connection_t));
+    if (!httpd->connections) {
+        free(httpd);
+        return NULL;
+    }
+    for (int i = 0; i < httpd->max_connections; i++) {
+        httpd->connections[i].connected = 0;
+        httpd->connections[i].socket_fd = -1;
+        httpd->connections[i].user_data = NULL;
+        httpd->connections[i].type = CONNECTION_TYPE_UNKNOWN;
+        httpd->connections[i].request = NULL;
+        httpd->connections[i].pending_remove = 0;
+    }
+
+    /* Use the logger provided */
+    httpd->logger = logger;
+
+    /* Save callback pointers */
+    memcpy(&httpd->callbacks, callbacks, sizeof(httpd_callbacks_t));
+
+    /* Initial status joined */
+    httpd->running = 0;
+    httpd->joined = 1;
+    httpd->server_fd4 = httpd->server_fd6 = -1;
+    MUTEX_CREATE(httpd->run_mutex);
+
+    return httpd;
+}
+
+void
+httpd_destroy(httpd_t *httpd)
+{
+    if (httpd) {
+        httpd_stop(httpd);
+        MUTEX_DESTROY(httpd->run_mutex);
+        free(httpd->connections);
+        free(httpd);
+    }
+}
+
+static void
+httpd_remove_connection(httpd_t *httpd, http_connection_t *connection, int sock_err)
+{
+    int socket_fd = connection->socket_fd;
+    if (sock_err) {
+        logger_log(httpd->logger, LOGGER_ERR, "httpd: recv error %d on socket %d: %s",
+                   sock_err, socket_fd, SOCKET_ERROR_STRING(sock_err));
+    }
+    if (connection->pending_remove) {
+        logger_log(httpd->logger, LOGGER_DEBUG, "connection removal was requested");
+        connection->pending_remove = 0;
+    }
+    if (connection->request) {
+        http_request_destroy(connection->request);
+        connection->request = NULL;
+    }
+    logger_log(httpd->logger, LOGGER_DEBUG, "removing connection type %s socket %d conn %p", typename[connection->type],
+               socket_fd, connection->user_data);
+    if (connection->user_data) {
+        httpd->callbacks.conn_destroy(connection->user_data);
+        connection->user_data = NULL;
+    }
+    if (socket_fd != -1) {
+        if (!sock_err) {
+            shutdown(socket_fd, SHUT_WR);
+        }
+        int ret = CLOSESOCKET(socket_fd);
+        connection->socket_fd = -1;
+        if (ret == -1) {
+            logger_log(httpd->logger, LOGGER_ERR, "httpd error in CLOSESOCKET: %d %s", errno, SOCKET_ERROR_STRING(errno));
+        } else {
+            logger_log(httpd->logger, LOGGER_INFO, "Connection closed on socket %d", socket_fd);
+        }
+    }
+    if (connection->connected) {
+        connection->connected = 0;
+        httpd->open_connections--;
+    }
+    connection->type = CONNECTION_TYPE_UNKNOWN;
+    connection->prefix_length = 0;
+    connection->request_started_ms = 0;
+}
+
+static int
+httpd_add_connection(httpd_t *httpd, int fd, unsigned char *local, int local_len, unsigned char *remote,
+                     int remote_len, unsigned int zone_id)
+{
+    void *user_data;
+    int i;
+
+    for (i=0; i<httpd->max_connections; i++) {
+        if (!httpd->connections[i].connected) {
+            break;
+        }
+    }
+    if (i == httpd->max_connections) {
+        /* This code should never be reached, we do not select server_fds when full */
+        logger_log(httpd->logger, LOGGER_INFO, "Max connections reached");
+        return -1;
+    }
+    /* Readiness is advisory; neither recv nor send may block the sole control
+     * worker (and therefore the JNI stop/join caller). */
+    unsigned long nonblocking = 1;
+    if (IOCTLSOCKET(fd, FIONBIO, &nonblocking) < 0) return -1;
+#ifdef SO_NOSIGPIPE
+    int no_sigpipe = 1;
+    setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &no_sigpipe, sizeof(no_sigpipe));
+#endif
+    user_data = httpd->callbacks.conn_init(httpd->callbacks.opaque, local, local_len, remote, remote_len, zone_id);
+    if (!user_data) {
+        logger_log(httpd->logger, LOGGER_ERR, "Error initializing HTTP request handler");
+        return -1;
+    }
+
+    httpd->open_connections++;
+    httpd->connections[i].socket_fd = fd;
+    httpd->connections[i].connected = 1;
+    httpd->connections[i].user_data = user_data;
+    httpd->connections[i].pending_remove = 0;
+    httpd->connections[i].type = CONNECTION_TYPE_UNKNOWN;   //should not be necessary ...
+    httpd->connections[i].request_started_ms = httpd_now_ms();
+    return 0;
+}
+
+static int
+httpd_accept_connection(httpd_t *httpd, int server_fd, int is_ipv6)
+{
+    struct sockaddr_storage remote_saddr;
+    socklen_t remote_saddrlen;
+    struct sockaddr_storage local_saddr;
+    socklen_t local_saddrlen;
+    unsigned char *local, *remote;
+    unsigned short port;
+    unsigned int local_zone_id, remote_zone_id;
+    int local_len, remote_len;
+    int ret, fd;
+
+    remote_saddrlen = sizeof(remote_saddr);
+    fd = accept(server_fd, (struct sockaddr *)&remote_saddr, &remote_saddrlen);
+    if (fd == -1) {
+        /* FIXME: Error happened */
+        int sock_err = SOCKET_GET_ERROR();
+        logger_log(httpd->logger, LOGGER_ERR, "httpd: error in accept: %d %s",
+                   sock_err, SOCKET_ERROR_STRING(sock_err));
+        return -1;
+    }
+
+    local_saddrlen = sizeof(local_saddr);
+    ret = getsockname(fd, (struct sockaddr *)&local_saddr, &local_saddrlen);
+    if (ret == -1) {
+        shutdown(fd, SHUT_RDWR);
+        CLOSESOCKET(fd);
+        return 0;
+    }
+
+    local = netutils_get_address(&local_saddr, &local_len, &local_zone_id, &port);   
+    logger_log(httpd->logger, LOGGER_INFO, "Accepted %s client on socket %d, port %u",
+               (is_ipv6 ? "IPv6"  : "IPv4"), fd, port);
+    remote = netutils_get_address(&remote_saddr, &remote_len, &remote_zone_id, NULL);
+
+    // is it correct that ipv6 link-local local and remote zone id should be the same, as asserted below? 
+    if (local_zone_id != remote_zone_id) {
+        logger_log(httpd->logger, LOGGER_INFO, "ipv6 zone_id mismatch: local_zone_id = %u, remote_zone_id = %u",
+		   local_zone_id, remote_zone_id);
+    }      
+    assert (local_zone_id == remote_zone_id);
+
+    ret = httpd_add_connection(httpd, fd, local, local_len, remote, remote_len, local_zone_id);
+    if (ret == -1) {
+        shutdown(fd, SHUT_RDWR);
+        CLOSESOCKET(fd);
+        return 0;
+    }
+    return 1;
+}
+
+bool
+httpd_nohold(httpd_t *httpd) {
+    return (httpd->nohold ? true: false);
+}
+
+void
+httpd_remove_known_connections(httpd_t *httpd) {
+    for (int i = 0; i < httpd->max_connections; i++) {
+        http_connection_t *connection = &httpd->connections[i];
+        if (!connection->connected || connection->type == CONNECTION_TYPE_UNKNOWN) {
+            continue;
+        }
+        connection->pending_remove = 1;
+    }
+}
+
+void
+httpd_remove_connections_by_type(httpd_t *httpd, connection_type_t type) {
+    for (int i = 0; i < httpd->max_connections; i++) {
+        http_connection_t *connection = &httpd->connections[i];
+        if (!connection->connected || connection->type != type) {
+            continue;
+        }
+        connection->pending_remove = 1;
+    }
+}
+
+static THREAD_RETVAL
+httpd_thread(void *arg)
+{
+    httpd_t *httpd = arg;
+    char http[] = "HTTP/1.1";
+    char event[] = "EVENT/1.0";
+    char buffer[1025];
+
+    bool logger_debug = (logger_get_level(httpd->logger) >= LOGGER_DEBUG);
+    assert(httpd);
+
+    while (1) {
+        fd_set rfds;
+        struct timeval tv;
+        int nfds = 0;
+        int nfds_set = 0;
+
+        MUTEX_LOCK(httpd->run_mutex);
+        if (!httpd->running) {
+            MUTEX_UNLOCK(httpd->run_mutex);
+            break;
+        }
+        MUTEX_UNLOCK(httpd->run_mutex);
+
+        /* Bound state/stop/deadline observation even with no socket activity. */
+        tv.tv_sec = 0;
+        tv.tv_usec = 50000;
+
+        /* Get the correct nfds value and set rfds */
+        FD_ZERO(&rfds);
+        if (httpd->open_connections < httpd->max_connections) {
+            if (httpd->server_fd4 != -1) {
+                FD_SET(httpd->server_fd4, &rfds);
+                if (nfds <= httpd->server_fd4) {
+                    nfds = httpd->server_fd4+1;
+                }
+            }
+            if (httpd->server_fd6 != -1) {
+                FD_SET(httpd->server_fd6, &rfds);
+                if (nfds <= httpd->server_fd6) {
+                    nfds = httpd->server_fd6+1;
+                }
+            }
+        }
+        for (int i = 0; i < httpd->max_connections; i++) {
+            int socket_fd;
+            if (!httpd->connections[i].connected) {
+                continue;
+            }
+            if (httpd->connections[i].pending_remove ||
+                (httpd->connections[i].request_started_ms &&
+                 httpd_now_ms() - httpd->connections[i].request_started_ms >= HTTPD_REQUEST_TIMEOUT_MS)) {
+                httpd_remove_connection(httpd, &httpd->connections[i], 0);
+                continue;
+            }
+            socket_fd = httpd->connections[i].socket_fd;
+            FD_SET(socket_fd, &rfds);
+            if (nfds <= socket_fd) {
+                nfds = socket_fd+1;
+            }
+        }
+
+        nfds_set = select(nfds, &rfds, NULL, NULL, &tv);
+        if (nfds_set == 0) {
+            /* Timeout happened */
+            continue;
+        } else if (nfds_set == -1) {
+            int sock_err = SOCKET_GET_ERROR();
+            logger_log(httpd->logger, LOGGER_ERR,
+                       "httpd error in select: %d %s", sock_err, SOCKET_ERROR_STRING(sock_err));
+            break;
+        }
+
+        if (httpd->open_connections < httpd->max_connections &&
+            httpd->server_fd4 != -1 && FD_ISSET(httpd->server_fd4, &rfds)) {
+            int ret = httpd_accept_connection(httpd, httpd->server_fd4, 0);
+            if (ret == -1) {
+                logger_log(httpd->logger, LOGGER_ERR, "httpd error in accept ipv4");
+                break;
+            } else if (ret == 0) {
+                continue;
+            }
+        }
+        if (httpd->open_connections < httpd->max_connections &&
+            httpd->server_fd6 != -1 && FD_ISSET(httpd->server_fd6, &rfds)) {
+            int ret = httpd_accept_connection(httpd, httpd->server_fd6, 1);
+            if (ret == -1) {
+                logger_log(httpd->logger, LOGGER_ERR, "httpd error in accept ipv6");
+                break;
+            } else if (ret == 0) {
+                continue;
+            }
+        }
+        for (int i = 0; i < httpd->max_connections; i++) {
+            int recv_datalen = 0;
+            http_connection_t *connection = &httpd->connections[i];
+
+            if (!connection->connected) {
+                continue;
+            }
+            if (!FD_ISSET(connection->socket_fd, &rfds)) {
+                continue;
+            }
+
+            /* If not in the middle of request, allocate one */
+            if (!connection->request) {
+                connection->request = http_request_init();
+                assert(connection->request);
+                connection->prefix_length = 0;
+                if (!connection->request_started_ms) connection->request_started_ms = httpd_now_ms();
+                if (connection->type == CONNECTION_TYPE_PTTH) {
+                    http_request_set_reverse(connection->request);
+                }
+                logger_log(httpd->logger, LOGGER_DEBUG, "new request, connection %d, socket %d type %s",
+                           i, connection->socket_fd, typename [connection->type]);
+            }
+
+            logger_log(httpd->logger, LOGGER_DEBUG, "httpd receiving on socket %d, connection %d",
+                       connection->socket_fd, i);
+            if (logger_debug) {
+                logger_log(httpd->logger, LOGGER_DEBUG,"\nhttpd: current connections:");
+                for (int i = 0; i < httpd->max_connections; i++) {
+                    http_connection_t *connection = &httpd->connections[i];
+                    if (!connection->connected || !connection->socket_fd) {
+                        continue;
+                    }
+                    if (!FD_ISSET(connection->socket_fd, &rfds)) {
+                        logger_log(httpd->logger, LOGGER_DEBUG, "connection %d type %d socket %d  conn %p %s", i,
+                                   connection->type, connection->socket_fd,
+                                   connection->user_data, typename [connection->type]);
+                    } else {
+                        logger_log(httpd->logger, LOGGER_DEBUG, "connection %d type %d socket %d  conn %p %s ACTIVE CONNECTION",
+                                   i, connection->type, connection->socket_fd, connection->user_data, typename [connection->type]);
+                    }
+                }
+                logger_log(httpd->logger, LOGGER_DEBUG, " ");
+            }
+            /* reverse-http responses from the client must not be sent to the llhttp parser:
+             * such messages start with "HTTP/1.1" (or sometimes with "EVENT/1.0")  */
+            /* Keep the protocol discriminator in connection state across reads.
+             * Never wait for a second recv in this readiness turn. */
+            size_t prefix = connection->prefix_length < 8 ? connection->prefix_length : 0;
+            if (prefix) memcpy(buffer, connection->prefix, prefix);
+            int ret = recv(connection->socket_fd, buffer + prefix, 1024 - prefix, 0);
+            if (ret == 0) {
+                httpd_remove_connection(httpd, connection, 0);
+                continue;
+            }
+            if (ret < 0) {
+                if (errno != SOCKET_ERRORNAME(EAGAIN) && errno != SOCKET_ERRORNAME(EWOULDBLOCK) &&
+                    errno != SOCKET_ERRORNAME(EINTR)) {
+                    httpd_remove_connection(httpd, connection, SOCKET_GET_ERROR());
+                }
+                continue;
+            }
+            recv_datalen = (int) prefix + ret;
+            if (connection->prefix_length < 8) {
+                if (recv_datalen < 8) {
+                    memcpy(connection->prefix, buffer, recv_datalen);
+                    connection->prefix_length = recv_datalen;
+                    continue;
+                }
+                connection->prefix_length = 8;
+                if (!memcmp(buffer, http, 8) || !memcmp(buffer, event, 8)) {
+                    http_request_set_reverse(connection->request);
+                }
+            }
+            if (http_request_is_reverse(connection->request)) {
+                connection->request_started_ms = 0; /* persistent reverse channel, not an unfinished request */
+                /* this is a response from the client to a
+                 * GET /event reverse HTTP request from the server */
+                if (recv_datalen && logger_debug) {
+                    buffer[recv_datalen] = '\0';
+                    logger_log(httpd->logger, LOGGER_INFO, "<<<< received response from client"
+                               " (reversed HTTP = \"PTTH/1.0\") connection"
+                               " on socket %d:\n%s\n", connection->socket_fd, buffer);
+                }
+                if (recv_datalen == 0) {
+                    httpd_remove_connection(httpd, connection, 0);
+                }
+                continue;
+            }
+
+            /* Parse HTTP request from data read from connection */
+            http_request_add_data(connection->request, buffer, recv_datalen);
+            if (http_request_has_error(connection->request)) {
+                char *data = utils_data_to_text((const char *) buffer, recv_datalen);
+                logger_log(httpd->logger, LOGGER_ERR, "httpd error in parsing: %s\n%s\n%s",
+                           http_request_get_error_name(connection->request),
+                           http_request_get_error_description(connection->request),
+                           data);
+                free (data);
+                httpd_remove_connection(httpd, connection, 0);
+                continue;
+            }
+
+            /* If request is finished, process and deallocate */
+            if (http_request_is_complete(connection->request)) {
+                http_response_t *response = NULL;
+                // Callback the received data to raop
+                if (logger_debug) {
+                    const char *method = http_request_get_method(connection->request);
+                    const char *url = http_request_get_url(connection->request);
+                    const char *protocol = http_request_get_protocol(connection->request);
+                    logger_log(httpd->logger, LOGGER_INFO, "httpd request received on socket %d, "
+                               "connection %d, method = %s, url = %s, protocol = %s",
+                               connection->socket_fd, i, method, url, protocol);
+                }
+                httpd->callbacks.conn_request(connection->user_data, connection->request, &response);
+                http_request_destroy(connection->request);
+                connection->request = NULL;
+                connection->request_started_ms = 0;
+
+                if (response) {
+                    const char *data;
+                    int datalen;
+                    int written;
+                    int ret;
+
+                    /* Get response data and datalen */
+                    data = http_response_get_data(response, &datalen);
+
+                    written = 0;
+                    uint64_t send_started = httpd_now_ms();
+                    while (written < datalen) {
+                        MUTEX_LOCK(httpd->run_mutex);
+                        int running = httpd->running;
+                        MUTEX_UNLOCK(httpd->run_mutex);
+                        if (!running ||
+                            httpd_now_ms() - send_started >= HTTPD_REQUEST_TIMEOUT_MS) break;
+                        fd_set wfds;
+                        FD_ZERO(&wfds);
+                        FD_SET(connection->socket_fd, &wfds);
+                        struct timeval wait = {0, 50000};
+                        ret = select(connection->socket_fd + 1, NULL, &wfds, NULL, &wait);
+                        if (ret == 0 || (ret < 0 && errno == EINTR)) continue;
+                        if (ret < 0) break;
+#ifdef MSG_NOSIGNAL
+                        ret = send(connection->socket_fd, data+written, datalen-written, MSG_NOSIGNAL);
+#else
+                        ret = send(connection->socket_fd, data+written, datalen-written, 0);
+#endif
+                        if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)) continue;
+                        if (ret <= 0) break;
+                        written += ret;
+                    }
+                    if (written != datalen) {
+                        httpd_remove_connection(httpd, connection, 0);
+                    }
+
+                    if (http_response_get_disconnect(response)) {
+                        logger_log(httpd->logger, LOGGER_INFO, "Disconnecting on software request");
+                        httpd_remove_connection(httpd, connection, 0);
+                    }
+                } else {
+                    logger_log(httpd->logger, LOGGER_WARNING, "httpd didn't get response");
+                }
+                http_response_destroy(response);
+            } else {
+                logger_log(httpd->logger, LOGGER_DEBUG, "Request not complete, waiting for more data...");
+            }
+        }
+    }
+
+    /* Remove all connections that are still connected */
+    for (int i = 0; i < httpd->max_connections; i++) {
+        http_connection_t *connection = &httpd->connections[i];
+
+        if (!connection->connected) {
+            continue;
+        }
+        logger_log(httpd->logger, LOGGER_INFO, "Removing connection for socket %d", connection->socket_fd);
+        httpd_remove_connection(httpd, connection, 0);
+    }
+
+    /* Close server sockets since they are not used any more */
+    if (httpd->server_fd4 != -1) {
+        shutdown(httpd->server_fd4, SHUT_RDWR);
+        CLOSESOCKET(httpd->server_fd4);
+        httpd->server_fd4 = -1;
+    }
+    if (httpd->server_fd6 != -1) {
+        shutdown(httpd->server_fd6, SHUT_RDWR);
+        CLOSESOCKET(httpd->server_fd6);
+        httpd->server_fd6 = -1;
+    }
+
+    // Ensure running reflects the actual state
+    MUTEX_LOCK(httpd->run_mutex);
+    httpd->running = 0;
+    MUTEX_UNLOCK(httpd->run_mutex);
+
+    logger_log(httpd->logger, LOGGER_DEBUG, "Exiting httpd thread");
+
+    return 0;
+}
+
+int
+httpd_start(httpd_t *httpd, unsigned short *port)
+{
+    /* How many connection attempts are kept in queue */
+    int backlog = 5;
+
+    assert(httpd);
+    assert(port);
+
+    MUTEX_LOCK(httpd->run_mutex);
+    if (httpd->running || !httpd->joined) {
+        MUTEX_UNLOCK(httpd->run_mutex);
+        return 0;
+    }
+
+    httpd->server_fd4 = netutils_init_socket(port, 0, 0);
+    if (httpd->server_fd4 == -1) {
+        logger_log(httpd->logger, LOGGER_ERR, "Error initialising socket %d", SOCKET_GET_ERROR());
+        MUTEX_UNLOCK(httpd->run_mutex);
+        return -1;
+    }
+    httpd->server_fd6 = netutils_init_socket(port, 1, 0);
+        if (httpd->server_fd6 == -1) {
+            logger_log(httpd->logger, LOGGER_WARNING, "Error initialising IPv6 socket %d", SOCKET_GET_ERROR());
+            logger_log(httpd->logger, LOGGER_WARNING, "Continuing without IPv6 support");
+        }
+
+    if (httpd->server_fd4 != -1 && listen(httpd->server_fd4, backlog) == -1) {
+        logger_log(httpd->logger, LOGGER_ERR, "Error listening to IPv4 socket");
+        CLOSESOCKET(httpd->server_fd4);
+        CLOSESOCKET(httpd->server_fd6);
+        MUTEX_UNLOCK(httpd->run_mutex);
+        return -2;
+    }
+    if (httpd->server_fd6 != -1 && listen(httpd->server_fd6, backlog) == -1) {
+        logger_log(httpd->logger, LOGGER_ERR, "Error listening to IPv6 socket");
+        CLOSESOCKET(httpd->server_fd4);
+        CLOSESOCKET(httpd->server_fd6);
+        MUTEX_UNLOCK(httpd->run_mutex);
+        return -2;
+    }
+    logger_log(httpd->logger, LOGGER_INFO, "Initialized server socket(s)");
+
+    /* Set values correctly and create new thread */
+    httpd->running = 1;
+    httpd->joined = 0;
+    THREAD_CREATE(httpd->thread, httpd_thread, httpd);
+    MUTEX_UNLOCK(httpd->run_mutex);
+
+    return 1;
+}
+
+int
+httpd_is_running(httpd_t *httpd)
+{
+    int running;
+
+    assert(httpd);
+
+    MUTEX_LOCK(httpd->run_mutex);
+    running = httpd->running || !httpd->joined;
+    MUTEX_UNLOCK(httpd->run_mutex);
+
+    return running;
+}
+
+void
+httpd_stop(httpd_t *httpd)
+{
+    assert(httpd);
+
+    MUTEX_LOCK(httpd->run_mutex);
+    /* Android port: a finished worker still needs joining before destruction. */
+    if (httpd->joined) {
+        MUTEX_UNLOCK(httpd->run_mutex);
+        return;
+    }
+    httpd->running = 0;
+    MUTEX_UNLOCK(httpd->run_mutex);
+
+    THREAD_JOIN(httpd->thread);
+
+    MUTEX_LOCK(httpd->run_mutex);
+    httpd->joined = 1;
+    MUTEX_UNLOCK(httpd->run_mutex);
+}

@@ -1,0 +1,39 @@
+# Toolchains and SDKs (hundreds of MB, provision per README)
+.tools/
+local.properties
+
+# Donor reference checkouts (only needed to regenerate patches)
+references/
+
+# Build outputs
+build/
+app/build/
+.gradle/
+.kotlin/
+.cxx/
+*.iml
+.idea/
+
+# Delivery pipeline internals
+.delivery-releases/
+deliverables/
+
+# Working evidence: logs, screenshots, transcripts. Curated docs live in docs/.
+evidence/
+
+# Python and OS noise
+__pycache__/
+*.pyc
+.DS_Store
+
+# Never commit signing material
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+
+# Local large artifacts outside release/
+tools/*.zip
+tools/*.tar.gz
