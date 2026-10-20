@@ -49,7 +49,7 @@ Discovery uses mDNS on the local subnet. It does not cross NAT, and it does not 
 
 ### Fastest: sideload the APK
 
-1. Download **[`release/WD-Display-0.1.4-dev.apk`](release/WD-Display-0.1.4-dev.apk)** (28 MB).
+1. Download **[`release/WD-Display-0.1.5-dev.apk`](release/WD-Display-0.1.5-dev.apk)** (28 MB).
 2. On the phone, open the file. Android asks you to allow installs from that app the first time (Settings → Apps → Special access → Install unknown apps).
 3. Tap Install, then Open.
 
@@ -58,7 +58,7 @@ The APK is debug-signed, so Play Protect may show a warning. That is expected fo
 ### Or with adb
 
 ```bash
-adb install -r WD-Display-0.1.4-dev.apk
+adb install -r WD-Display-0.1.5-dev.apk
 adb shell am start -n org.pocketairdisplay.receiver/.MainActivity
 ```
 
@@ -127,7 +127,7 @@ tests/                Host-side regression and delivery tests
 
 GPLv3. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-Because this project is GPLv3, every distributed binary ships with corresponding source: **[`release/WD-Display-0.1.4-dev-source.tar.gz`](release/WD-Display-0.1.4-dev-source.tar.gz)**. If you rebuild and redistribute the APK, keep that bundle alongside it.
+Because this project is GPLv3, every distributed binary ships with corresponding source: **[`release/WD-Display-0.1.5-dev-source.tar.gz`](release/WD-Display-0.1.5-dev-source.tar.gz)**. If you rebuild and redistribute the APK, keep that bundle alongside it.
 
 Derived from [Wormhole Display](https://github.com/pgodlews/wormhole-display), which builds on the UxPlay AirPlay core. Legacy RAOP/AirTunes audio is deliberately excluded: no RSA private key ships in this tree, and audio ANNOUNCE requests are rejected. Only ordinary screen interoperability is implemented, with no DRM or protected-content support.
 

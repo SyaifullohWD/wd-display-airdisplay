@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.5-dev
+
+Icon set rebuilt from the designer's 1024×1024 master.
+
+- The artwork is a full-bleed periwinkle gradient tile with a translucent glass W, so the background is part of the identity and the icon is composed rather than keyed out.
+- Adaptive icon uses a safe composition: the artwork sits at the 72dp viewport inside the 108dp layer, and the ring around it is filled by clamping to the tile's own edge pixels. The gradient therefore runs continuously to the mask edge, with no seam, and the mark's intentional off-centre balance is preserved under every launcher mask.
+- Regenerated: legacy launcher PNGs at 48, 72, 96, 144 and 192 with baked rounded corners, adaptive foreground, background and monochrome layers at 432, TV banners at 320×180 and 640×360, and a 512×512 store/README icon.
+- Reproducible from the master: `design/art/build_icons_from_master.py`.
+
 ## 0.1.4-dev
 
 Apple-style visual language, and the layout no longer collapses on phones.

@@ -1,24 +1,24 @@
 # Install WD Display
 
-Three ways to install, fastest first. The file you want is **`release/WD-Display-0.1.4-dev.apk`** (28 MB, arm64, Android 10+).
+Three ways to install, fastest first. The file you want is **`release/WD-Display-0.1.5-dev.apk`** (28 MB, arm64, Android 10+).
 
 Before you start, confirm the download:
 
 ```bash
 shasum -a 256 -c SHA256SUMS
-# WD-Display-0.1.4-dev.apk: OK
-# WD-Display-0.1.4-dev-source.tar.gz: OK
+# WD-Display-0.1.5-dev.apk: OK
+# WD-Display-0.1.5-dev-source.tar.gz: OK
 ```
 
 Expected APK checksum:
 
 ```text
-cd671f0386087c7947807c6edcd14dc5b248e8c379fc5601e0a95d3840f9ab4c
+390869b1694593cf0fe2df57296a751997b20092504c3a4d5ce7d54d4ea35c1e
 ```
 
 ## 1. Install on the phone directly
 
-1. Copy `WD-Display-0.1.4-dev.apk` to the phone (USB, Google Drive, or download it from the GitHub release page).
+1. Copy `WD-Display-0.1.5-dev.apk` to the phone (USB, Google Drive, or download it from the GitHub release page).
 2. Open the file with the phone's file manager.
 3. Android will refuse the first time and offer a settings shortcut. Allow **Install unknown apps** for whichever app you opened it from (Files, Chrome, Drive).
 4. Tap **Install**. Play Protect may warn that the app is not from the Play Store. That is expected: the APK is debug-signed. Choose **Install anyway**.
@@ -28,7 +28,7 @@ cd671f0386087c7947807c6edcd14dc5b248e8c379fc5601e0a95d3840f9ab4c
 
 ```bash
 adb devices                      # confirm your phone is listed and authorized
-adb install -r WD-Display-0.1.4-dev.apk
+adb install -r WD-Display-0.1.5-dev.apk
 adb shell am start -n org.pocketairdisplay.receiver/.MainActivity
 ```
 
@@ -36,7 +36,7 @@ If you get `INSTALL_FAILED_UPDATE_INCOMPATIBLE` because an older build with a di
 
 ```bash
 adb uninstall org.pocketairdisplay.receiver
-adb install WD-Display-0.1.4-dev.apk
+adb install WD-Display-0.1.5-dev.apk
 ```
 
 Uninstalling removes saved settings and the connection history for this app only.
@@ -70,7 +70,7 @@ or long-press the icon and remove it like any other app.
 | Property | Value |
 |---|---|
 | Package | `org.pocketairdisplay.receiver` |
-| Version | `0.1.4-dev` (versionCode 5) |
+| Version | `0.1.5-dev` (versionCode 5) |
 | Size | 28 MB |
 | ABI | `arm64-v8a` only |
 | Min Android | 10 (API 29) |
