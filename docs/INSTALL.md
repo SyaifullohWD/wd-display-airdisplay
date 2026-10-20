@@ -1,24 +1,24 @@
 # Install WD Display
 
-Three ways to install, fastest first. The file you want is **`release/WD-Display-0.1.5-dev.apk`** (28 MB, arm64, Android 10+).
+Three ways to install, fastest first. The file you want is **`release/WD-Display-0.2.1-dev.apk`** (28 MB, arm64, Android 10+).
 
 Before you start, confirm the download:
 
 ```bash
 shasum -a 256 -c SHA256SUMS
-# WD-Display-0.1.5-dev.apk: OK
-# WD-Display-0.1.5-dev-source.tar.gz: OK
+# WD-Display-0.2.1-dev.apk: OK
+# WD-Display-0.2.1-dev-source.tar.gz: OK
 ```
 
 Expected APK checksum:
 
 ```text
-390869b1694593cf0fe2df57296a751997b20092504c3a4d5ce7d54d4ea35c1e
+4dc04619f48ce68ab942fc9f4f6883d51753b395ad975a471072b846b5bb8e24
 ```
 
 ## 1. Install on the phone directly
 
-1. Copy `WD-Display-0.1.5-dev.apk` to the phone (USB, Google Drive, or download it from the GitHub release page).
+1. Copy `WD-Display-0.2.1-dev.apk` to the phone (USB, Google Drive, or download it from the GitHub release page).
 2. Open the file with the phone's file manager.
 3. Android will refuse the first time and offer a settings shortcut. Allow **Install unknown apps** for whichever app you opened it from (Files, Chrome, Drive).
 4. Tap **Install**. Play Protect may warn that the app is not from the Play Store. That is expected: the APK is debug-signed. Choose **Install anyway**.
@@ -28,15 +28,15 @@ Expected APK checksum:
 
 ```bash
 adb devices                      # confirm your phone is listed and authorized
-adb install -r WD-Display-0.1.5-dev.apk
-adb shell am start -n org.pocketairdisplay.receiver/.MainActivity
+adb install -r WD-Display-0.2.1-dev.apk
+adb shell am start -n org.wddisplay.receiver/.MainActivity
 ```
 
 If you get `INSTALL_FAILED_UPDATE_INCOMPATIBLE` because an older build with a different signature is installed:
 
 ```bash
-adb uninstall org.pocketairdisplay.receiver
-adb install WD-Display-0.1.5-dev.apk
+adb uninstall org.wddisplay.receiver
+adb install WD-Display-0.2.1-dev.apk
 ```
 
 Uninstalling removes saved settings and the connection history for this app only.
@@ -60,7 +60,7 @@ Install the new APK over the old one (`adb install -r`, or just open the new fil
 ## Uninstalling
 
 ```bash
-adb uninstall org.pocketairdisplay.receiver
+adb uninstall org.wddisplay.receiver
 ```
 
 or long-press the icon and remove it like any other app.
@@ -69,8 +69,8 @@ or long-press the icon and remove it like any other app.
 
 | Property | Value |
 |---|---|
-| Package | `org.pocketairdisplay.receiver` |
-| Version | `0.1.5-dev` (versionCode 5) |
+| Package | `org.wddisplay.receiver` |
+| Version | `0.2.1-dev` (versionCode 5) |
 | Size | 28 MB |
 | ABI | `arm64-v8a` only |
 | Min Android | 10 (API 29) |

@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.2.1-dev
+
+Icon artwork finally renders at the authored scale.
+
+- Root cause of the long icon saga: an adaptive icon is drawn on a 108dp canvas but a launcher shows the 72dp viewport, so artwork must be composed at 72/108 of the canvas. It had been placed at 94%, which made the mark render about 1.4x too large and look identical to the older, oversized artwork. The design was correct; the composition was not.
+- Artwork now sits at the 72dp viewport with the surrounding ring filled by clamping to the tile's own edge pixels, so the gradient stays continuous to the mask edge with no seam.
+- Verified on device: the launcher now shows the mark at roughly 55 to 60% of the tile width, matching the designer's master.
+
+## 0.2.0-dev
+
+Install identity moved to the WD Display name.
+
+- `applicationId` is now `org.wddisplay.receiver`. The code package stays `org.pocketairdisplay.receiver` so native JNI symbols and the receiver core are untouched.
+- Device startup validator updated for the split: install identity, code package and service component are now resolved separately.
+- Test fixtures no longer hardcode the package name; they read it from the validator.
+
+## 0.1.9-dev
+
+Launcher entry moved to an activity alias so its icon is not served from a stale cache.
+
+- The launcher component is now `org.pocketairdisplay.receiver.Launcher`, an activity alias targeting `MainActivity`. One UI Home keys its cached icon bitmap to the launcher component, so reinstalls, version bumps, resource renames and reboots all kept showing a previously cached icon. A new component name has no cache to hit.
+- `MainActivity` keeps `exported=true` and loses only its launcher intent filter, so explicit `am start` and instrumentation runs still work.
+- Also diagnosed during this: Samsung's "apply color palette to app icons" was enabled (`colortheme_app_icon=1`), which routes icons through the theme engine and caches the result. It is now off; re-enable it in Settings → Wallpaper and style if you want tinted icons.
+- No changes to protocol, service, permissions or decoder behaviour.
+
+## 0.1.7-dev
+
+Icon rebuilt from the designer's updated master, which is the version actually shipped.
+
+- The artwork now uses the designer's corrected scale: the mark occupies 56% × 45% of the tile with 19-28% padding, instead of the earlier 78% × 62% that crowded the edges.
+- Adaptive composition changed with it. The artwork is composed at 94% of the 108dp canvas, so the mask crops only the expendable outer corners of the gradient rather than wrapping the art in a visible ring. The mark now reads at the same relative size as the legacy icon and every other launcher icon.
+- Monochrome layer removed. The gradient tile and glass mark are the identity, so this app opts out of Android 13 themed-icon tinting and always shows the original artwork. The notification small icon is unaffected.
+- The master is kept in the repo at `design/art/wd-display-master.png`, so the whole set regenerates with `python3 design/art/build_icons_from_master.py design/art/wd-display-master.png`.
+
 ## 0.1.5-dev
 
 Icon set rebuilt from the designer's 1024×1024 master.

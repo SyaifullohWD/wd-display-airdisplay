@@ -4,8 +4,8 @@ Everything needed to install the app, verify what you downloaded, and comply wit
 
 | File | What it is |
 |---|---|
-| `WD-Display-0.1.5-dev.apk` | The installable app, 28 MB, arm64, Android 10+ |
-| `WD-Display-0.1.5-dev-source.tar.gz` | Full corresponding source for this exact build (GPLv3 obligation), 18 MB |
+| `WD-Display-0.2.1-dev.apk` | The installable app, 28 MB, arm64, Android 10+ |
+| `WD-Display-0.2.1-dev-source.tar.gz` | Full corresponding source for this exact build (GPLv3 obligation), 18 MB |
 | `SHA256SUMS` | Checksums for both files above |
 | `LICENSE` | GPLv3 |
 | `THIRD_PARTY_NOTICES.md` | Every bundled component and its license |
@@ -16,7 +16,7 @@ Everything needed to install the app, verify what you downloaded, and comply wit
 Copy the APK to an Android phone (Android 10 or newer, arm64), open it, and allow installs from that source when Android asks. Or:
 
 ```bash
-adb install -r WD-Display-0.1.5-dev.apk
+adb install -r WD-Display-0.2.1-dev.apk
 ```
 
 More detail, including the notification prompt and Play Protect warning: [`../docs/INSTALL.md`](../docs/INSTALL.md).
@@ -28,16 +28,16 @@ shasum -a 256 -c SHA256SUMS
 ```
 
 ```text
-390869b1694593cf0fe2df57296a751997b20092504c3a4d5ce7d54d4ea35c1e  WD-Display-0.1.5-dev.apk
-71b8cc59c7b11c06df8d8b85961ee6baf13868a5fa7937aca58ed7da34c43c77  WD-Display-0.1.5-dev-source.tar.gz
+4dc04619f48ce68ab942fc9f4f6883d51753b395ad975a471072b846b5bb8e24  WD-Display-0.2.1-dev.apk
+a12c7ccbbdcfdeb9b1f5ed30ba4e0f1cac189a892ff25f463e11faf094322a1d  WD-Display-0.2.1-dev-source.tar.gz
 ```
 
 ## Build facts
 
 | | |
 |---|---|
-| Package | `org.pocketairdisplay.receiver` |
-| Version | `0.1.5-dev`, versionCode 5 |
+| Package | `org.wddisplay.receiver` |
+| Version | `0.2.1-dev`, versionCode 5 |
 | ABIs | `arm64-v8a` |
 | Min / target SDK | 29 / 34 |
 | Signature | Android debug certificate |

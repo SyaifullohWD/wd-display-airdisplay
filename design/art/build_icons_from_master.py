@@ -29,7 +29,12 @@ LEGACY = {
 }
 # Adaptive layers are 108dp. At xxxhdpi that is 432px; the 72dp viewport is 288px.
 ADAPTIVE_PX = 432
+# Launchers draw the 108dp adaptive canvas and mask it, but the visible icon is the
+# 72dp viewport, so the artwork has to sit at 72/108 of the canvas or it renders
+# enlarged. Everything outside that 288px block is the clamped edge extension the
+# mask crops, which keeps the gradient continuous with no seam.
 VIEWPORT_PX = 288
+ART_PX = VIEWPORT_PX
 
 
 def rounded_mask(size: int, radius_ratio: float = 0.225) -> Image.Image:
