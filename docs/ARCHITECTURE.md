@@ -9,7 +9,7 @@
 └───────────────────────────────────┬──────────────────────────────────┘
                                     │  same LAN / hotspot
 ┌───────────────────────────────────▼──────────────────────────────────┐
-│ Android app (org.pocketairdisplay.receiver)                          │
+│ Android app (org.wddisplay.receiver)                                 │
 │                                                                      │
 │  Compose UI ── WormholeServer (state, identity, history)             │
 │       │              │                                               │
@@ -28,6 +28,8 @@
 ```
 
 ## Layers
+
+**Install identity.** The application id is `org.wddisplay.receiver`. The code package is `org.pocketairdisplay.receiver`, inherited from the upstream project, so activity and JNI class names stay there. Both appear together in components: `org.wddisplay.receiver/org.pocketairdisplay.receiver.MainActivity`.
 
 **UI (Kotlin, Jetpack Compose).** A single dashboard: title, status card, connection details, orientation control, grouped settings, connection history, and a diagnostics overlay. Design tokens live in `WdTheme.kt`; the UI layer contains no raw color literals. Light and dark appearances both resolve.
 

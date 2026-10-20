@@ -33,7 +33,11 @@ android {
         }
     }
     defaultConfig {
-        applicationId = "org.pocketairdisplay.receiver"
+        // New install identity for the WD Display branding. The Kotlin/JNI package
+        // (namespace) stays org.pocketairdisplay.receiver so native symbol names and
+        // the receiver core are unchanged; only the app id moved, which also gives
+        // launchers a clean icon entry instead of a stale cached bitmap.
+        applicationId = "org.wddisplay.receiver"
         // Deps in app/src/main/cpp/deps were built with __ANDROID_API__=29, so
         // minSdk is 29 (Android 10) to match what the shipped binaries support.
         minSdk = 29

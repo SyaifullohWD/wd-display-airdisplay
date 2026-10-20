@@ -9,7 +9,18 @@ import json
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-PACKAGE = "org.pocketairdisplay.receiver"
+
+
+def _validator_package():
+    """Single source of truth: the package the validator actually targets."""
+    path = ROOT / "scripts/validate-device-startup.py"
+    spec = importlib.util.spec_from_file_location("startup_package_probe", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.PACKAGE
+
+
+PACKAGE = _validator_package()
 
 
 class StartupTest(unittest.TestCase):
@@ -27,10 +38,15 @@ class StartupTest(unittest.TestCase):
         import sys
         from types import SimpleNamespace
         device = self.module.Device(SimpleNamespace(adb=sys.executable, serial="fixture", output=Path(".")))
-        device.prefix = [sys.executable, "-c", "import sys; sys.stdout.buffer.write(b'bad \\xff Process: org.pocketairdisplay.receiver, PID: 50\\n')"]
+        child_code = (
+            "import sys; sys.stdout.buffer.write(b'bad \\xff Process: "
+            + PACKAGE
+            + ", PID: 50\\n')"
+        )
+        device.prefix = [sys.executable, "-c", child_code]
         output = device.run()
         self.assertIn(r"\xff", output)
-        self.assertIn("Process: org.pocketairdisplay.receiver", output)
+        self.assertIn("Process: " + PACKAGE, output)
 
     def test_matching_test_apk_identity_is_required(self):
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):

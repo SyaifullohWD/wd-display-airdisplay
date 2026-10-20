@@ -18,9 +18,13 @@ import sys
 import tempfile
 import time
 
-PACKAGE = "org.pocketairdisplay.receiver"
+# Install identity (gradle applicationId).
+PACKAGE = "org.wddisplay.receiver"
+# Code package (gradle namespace): activity and instrumentation class names live here,
+# which is deliberately different from the application id.
+CLASS_PREFIX = "org.pocketairdisplay.receiver"
 RUNNER = PACKAGE + ".test/androidx.test.runner.AndroidJUnitRunner"
-SERVICE_TEST = PACKAGE + ".ServiceStartupTest#serviceFirstStartsWithApplicationContextAndStopsCleanly"
+SERVICE_TEST = CLASS_PREFIX + ".ServiceStartupTest#serviceFirstStartsWithApplicationContextAndStopsCleanly"
 
 
 def arguments(argv=None):
@@ -169,13 +173,13 @@ def validate(args):
         device.run("shell", "am", "force-stop", PACKAGE)
         start = device.stamp()
         try:
-            launch = device.run("shell", "am", "start", "-W", "-n", PACKAGE + "/.MainActivity")
+            launch = device.run("shell", "am", "start", "-W", "-n", PACKAGE + "/" + CLASS_PREFIX + ".MainActivity")
             (args.output / "activity-launch.txt").write_text(launch)
             time.sleep(3)
             first = device.run("shell", "pidof", PACKAGE, check=False).strip()
             time.sleep(5)
             final = device.run("shell", "pidof", PACKAGE, check=False).strip()
-            service = device.run("shell", "dumpsys", "activity", "services", PACKAGE + "/.WormholeService")
+            service = device.run("shell", "dumpsys", "activity", "services", PACKAGE + "/" + CLASS_PREFIX + ".WormholeService")
             (args.output / "activity-service.txt").write_text(service)
             logs = device.logs("main", start)
             # Only this exact process's main logs, never unrelated app messages.

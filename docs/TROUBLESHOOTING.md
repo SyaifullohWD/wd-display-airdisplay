@@ -37,12 +37,12 @@ Work down this list in order. Most problems are network discovery, not the app.
 Fixed in 0.1.1 and later. If you are on an older build, update. Verify what you installed:
 
 ```bash
-adb shell dumpsys package org.pocketairdisplay.receiver | grep versionName
+adb shell dumpsys package org.wddisplay.receiver | grep versionName
 ```
 
 ## Install problems
 
-- **"App not installed"**: a build with a different signature is installed. `adb uninstall org.pocketairdisplay.receiver` then install again.
+- **"App not installed"**: a build with a different signature is installed. `adb uninstall org.wddisplay.receiver` then install again.
 - **Play Protect warning**: expected, the APK is debug-signed. Continue with "install anyway".
 - **"Parsing the package"**: truncated download. Re-download and check `shasum -a 256`.
 - **"Not compatible"**: the phone is 32-bit. This is an arm64-only build.
@@ -71,14 +71,14 @@ Extended mode is negotiated by macOS, not the app, and it is the least validated
 adb logcat -d | grep -i -E "pocketairdisplay|WD Display|raop|airplay"
 ```
 
-Include the app version (`adb shell dumpsys package org.pocketairdisplay.receiver | grep versionName`), your phone model, Android version, macOS version, and whether the connection was direct Wi-Fi or a hotspot.
+Include the app version (`adb shell dumpsys package org.wddisplay.receiver | grep versionName`), your phone model, Android version, macOS version, and whether the connection was direct Wi-Fi or a hotspot.
 
 ## Reset the receiver
 
 Clearing app storage resets the service name, settings and history:
 
 ```bash
-adb shell pm clear org.pocketairdisplay.receiver
+adb shell pm clear org.wddisplay.receiver
 ```
 
 The receiver restarts with defaults on next launch.

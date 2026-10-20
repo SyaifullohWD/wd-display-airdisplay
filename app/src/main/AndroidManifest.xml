@@ -12,20 +12,31 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-feature android:name="android.software.leanback" android:required="false" />
-    <application android:label="@string/app_name" android:icon="@mipmap/ic_launcher"
+    <application android:label="@string/app_name" android:icon="@mipmap/ic_launcher_wd"
         android:banner="@drawable/tv_banner"
         android:theme="@android:style/Theme.Material.NoActionBar" android:allowBackup="false"
         android:usesCleartextTraffic="false" android:supportsRtl="true">
         <activity android:name=".MainActivity" android:label="@string/app_name" android:exported="true" android:launchMode="singleTop"
-            android:icon="@mipmap/ic_launcher" android:banner="@drawable/tv_banner" android:screenOrientation="unspecified"
-            android:configChanges="orientation|screenSize|keyboardHidden">
+            android:icon="@mipmap/ic_launcher_wd" android:banner="@drawable/tv_banner" android:screenOrientation="unspecified"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+
+        <!-- The launcher entry lives on an alias so its component identity can be
+             changed independently of the activity itself. One UI Home caches an
+             app icon against the launcher component and will not refresh it on a
+             plain reinstall or reboot; a new component name forces a fresh entry. -->
+        <activity-alias android:name=".Launcher"
+            android:targetActivity=".MainActivity"
+            android:label="@string/app_name"
+            android:icon="@mipmap/ic_launcher_wd"
+            android:banner="@drawable/tv_banner"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
-        </activity>
+        </activity-alias>
 
         <service
             android:name=".WormholeService"
